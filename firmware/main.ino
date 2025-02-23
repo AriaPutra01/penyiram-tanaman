@@ -12,7 +12,7 @@ const int pompa = 5;
 
 using namespace websockets;
 WebsocketsClient client;
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); 
 
 void setup() {
     Serial.begin(115200);
@@ -23,12 +23,11 @@ void setup() {
     }
     Serial.println("\nWiFi Connected");
 
-    lcd.init();
-    lcd.backlight();
     lcd.begin(16, 2);
+    lcd.backlight(); 
 
     pinMode(pompa, OUTPUT);
-    digitalWrite(pompa, HIGH); // Pompa default mati
+    digitalWrite(pompa, HIGH); 
 
     client.onMessage([](WebsocketsMessage message) {
         Serial.println("Pesan dari Server: " + message.data());
