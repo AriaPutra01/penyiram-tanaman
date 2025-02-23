@@ -7,12 +7,12 @@ const char* ssid = "robi";
 const char* password = "obet1234";
 const char* websocket_server = "ws://192.168.1.100:3000/ws";
 
-const int sensorTanah = A0;  //  sensor kelembaban tanah
-const int pompa = 14;        // D5 (GPIO14) untuk relay
+const int sensorTanah = A0;  // sensor kelembaban tanah
+const int pompa = 14;        // D5 relay
 
-// Pin I2C untuk ESP8266
-const int SDA_PIN = 4;  // D2 (GPIO4)
-const int SCL_PIN = 5;  // D1 (GPIO5)
+
+const int SDA_PIN = 4;  // D2
+const int SCL_PIN = 5;  // D1
 
 using namespace websockets;
 WebsocketsClient client;
@@ -32,8 +32,6 @@ void scrollText(const char* text) {
 
 void setup() {
     Serial.begin(115200);
-
-   
     Wire.begin(SDA_PIN, SCL_PIN);
 
     // Inisialisasi LCD
@@ -45,7 +43,7 @@ void setup() {
     lcd.setCursor(0, 1);
     lcd.print("Initializing...");
 
-    // Connect to WiFi
+    // cek konek WiFi
     WiFi.begin(ssid, password);
     Serial.println("Menghubungkan ke WiFi...");
     while (WiFi.status() != WL_CONNECTED) {
@@ -65,12 +63,12 @@ void setup() {
             digitalWrite(pompa, LOW); 
             Serial.println("Pompa ON");
         } else if (message.data() == "{\"pump\":\"OFF\"}") {
-            digitalWrite(pompa, HIGH); 
+            digitalWrite(pompa, HIGH);
             Serial.println("Pompa OFF");
         }
     });
 
-    // Cek koneksi WebSocket
+    // cek koneksi server WebSocket
     if (client.connect(websocket_server)) {
         Serial.println("WebSocket Connected");
     } else {
@@ -89,12 +87,13 @@ void loop() {
     lcd.print(moisturePercent);
     lcd.print("%");
 
-    if (kelembaban > 400 && kelembaban < 1023) {
-        digitalWrite(pompa, LOW); 
+    
+    if (moisturePercent < 50) { 
+        digitalWrite(pompa, LOW);
         scrollText("TANAMAN LAPAR Penyiraman ON");
-    } else if (kelembaban > 100 && kelembaban <= 400) {
-        digitalWrite(pompa, HIGH); 
-        scrollText("TANAMAN KENYANG Penyiraman Off");
+    } else { 
+        digitalWrite(pompa, HIGH);
+        scrollText("TANAMAN KENYANG Penyiraman OFF");
     }
 
 
@@ -103,7 +102,6 @@ void loop() {
         client.send(jsonData);
         Serial.println("Dikirim: " + jsonData);
     }
-
 
     client.poll();
     delay(2000);
