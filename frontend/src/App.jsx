@@ -1,44 +1,34 @@
 import { useEffect, useState } from "react";
+import useWebSocket from "react-use-websocket";
 
-const WS_URL = "ws://192.168.1.100:3000";
+const WS_URL = "ws://localhost:3000";
 
 export default function WebSocketComponent() {
+  const { sendMessage, lastMessage } = useWebSocket(WS_URL);
   const [data, setData] = useState({ moisture: 0, pump: "OFF" });
-  const [ws, setWs] = useState(null);
+  const [messageHistory, setMessageHistory] = useState([]);
 
   useEffect(() => {
-    const socket = new WebSocket(WS_URL);
-    setWs(socket);
-
-    socket.onmessage = (event) => {
-      try {
-        const receivedData = JSON.parse(event.data);
-        setData(receivedData);
-      } catch (error) {
-        console.error("Error parsing WebSocket data:", error);
-      }
-    };
-
-    socket.onclose = () => console.log("WebSocket closed");
-
-    return () => socket.close();
-  }, []);
+    if (lastMessage !== null) {
+      const receivedData = JSON.parse(lastMessage.data);
+      setData(receivedData);
+      setMessageHistory((prev) => [...prev, receivedData]);
+    }
+  }, [lastMessage]);
 
   const togglePump = () => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const newPumpState = data.pump === "ON" ? "OFF" : "ON";
-      ws.send(JSON.stringify({ pump: newPumpState }));
-    }
+    const newPumpState = data.pump === "ON" ? "OFF" : "ON";
+    sendMessage(JSON.stringify({ pump: newPumpState }));
   };
 
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-bold">Monitoring Kelembaban</h1>
-      <p>Kelembaban: {data.moisture}%</p>
-      <p>Pompa: {data.pump}</p>
+    <div className="flex flex-col items-center justify-center h-screen text-center">
+      <h1 className="text-2xl font-bold">Monitoring Kelembaban</h1>
+      <p className="text-lg">Kelembaban: {data.moisture}%</p>
+      <p className="text-lg">Pompa: {data.pump}</p>
       <button
-        onClick={togglePump}
-        className="mt-2 px-4 py-2 bg-blue-500 text-white rounded">
+        className="px-4 py-2 mt-4 text-white bg-blue-500 rounded hover:bg-blue-600"
+        onClick={togglePump}>
         Toggle Pompa
       </button>
     </div>

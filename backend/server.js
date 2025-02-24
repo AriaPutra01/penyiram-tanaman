@@ -10,7 +10,7 @@ const server = app.listen(port, () =>
 const wss = new Server({ server });
 
 let espSocket = null;
-const clients = new Set(); // Menyimpan semua client frontend
+const clients = new Set();
 
 wss.on("connection", (ws) => {
   console.log("New WebSocket connection");

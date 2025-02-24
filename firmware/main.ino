@@ -4,6 +4,8 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
+using namespace websockets;
+
 const char* ssid = "robi";
 const char* password = "obet1234";
 
@@ -27,10 +29,7 @@ void sendSensorData() {
 }
 
 void scrollText(const char* text) {
-    String message = "                "; 
-    message += text; 
-    message += "                "; 
-
+    String message = "                " + String(text) + "                "; 
     for (int i = 0; i < message.length() - 15; i++) {
         lcd.setCursor(0, 1);
         lcd.print(message.substring(i, i + 16)); 
