@@ -1,36 +1,24 @@
-import { useEffect, useState } from "react";
-import useWebSocket from "react-use-websocket";
+import React from "react";
+import useWebSocketHook from "./hooks/useWebSocket";
 
-const WS_URL = "ws://localhost:3000";
+const WS_URL = "ws://192.168.43.216:81/ws";
 
-export default function WebSocketComponent() {
-  const { sendMessage, lastMessage } = useWebSocket(WS_URL);
-  const [data, setData] = useState({ moisture: 0, pump: "OFF" });
-  const [messageHistory, setMessageHistory] = useState([]);
-
-  useEffect(() => {
-    if (lastMessage !== null) {
-      const receivedData = JSON.parse(lastMessage.data);
-      setData(receivedData);
-      setMessageHistory((prev) => [...prev, receivedData]);
-    }
-  }, [lastMessage]);
-
-  const togglePump = () => {
-    const newPumpState = data.pump === "ON" ? "OFF" : "ON";
-    sendMessage(JSON.stringify({ pump: newPumpState }));
-  };
+const App = () => {
+  const { moisture, pump, togglePump } = useWebSocketHook(WS_URL);
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen text-center">
-      <h1 className="text-2xl font-bold">Monitoring Kelembaban</h1>
-      <p className="text-lg">Kelembaban: {data.moisture}%</p>
-      <p className="text-lg">Pompa: {data.pump}</p>
-      <button
-        className="px-4 py-2 mt-4 text-white bg-blue-500 rounded hover:bg-blue-600"
-        onClick={togglePump}>
-        Toggle Pompa
+    <div style={{ textAlign: "center", padding: "20px" }}>
+      <h1>Monitor Kelembaban Tanah</h1>
+      <p><strong>Kelembaban:</strong> {moisture !== null ? `${moisture}%` : "Loading..."}</p>
+      <p><strong>Status Pompa:</strong> {pump}</p>
+      <button onClick={() => togglePump("ON")} style={{ marginRight: "10px" }}>
+        Hidupkan Pompa
+      </button>
+      <button onClick={() => togglePump("OFF")}>
+        Matikan Pompa
       </button>
     </div>
   );
-}
+};
+
+export default App;
