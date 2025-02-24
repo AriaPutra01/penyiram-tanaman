@@ -1,50 +1,46 @@
-import { useState } from "react";
-import useWebSocket from "react-use-websocket";
+import { useEffect, useState } from "react";
 
-export default function PlantMonitor() {
-  const [moisture, setMoisture] = useState(0);
-  const [pumpStatus, setPumpStatus] = useState("OFF");
+const WS_URL = "ws://192.168.1.100:3000";
 
-  const { sendJsonMessage, readyState } = useWebSocket(
-    "ws://localhost:3000/ws",
-    {
-      shouldReconnect: () => true,
-      onMessage: (event) => {
-        const data = JSON.parse(event.data);
-        console.log("Data diterima:", data);
+export default function WebSocketComponent() {
+  const [data, setData] = useState({ moisture: 0, pump: "OFF" });
+  const [ws, setWs] = useState(null);
 
-        if (data.moisture !== undefined) setMoisture(data.moisture);
-        if (data.pump) setPumpStatus(data.pump);
-      },
-    }
-  );
+  useEffect(() => {
+    const socket = new WebSocket(WS_URL);
+    setWs(socket);
+
+    socket.onmessage = (event) => {
+      try {
+        const receivedData = JSON.parse(event.data);
+        setData(receivedData);
+      } catch (error) {
+        console.error("Error parsing WebSocket data:", error);
+      }
+    };
+
+    socket.onclose = () => console.log("WebSocket closed");
+
+    return () => socket.close();
+  }, []);
 
   const togglePump = () => {
-    const newStatus = pumpStatus === "OFF" ? "ON" : "OFF";
-    sendJsonMessage({ pump: newStatus });
-    setPumpStatus(newStatus);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      const newPumpState = data.pump === "ON" ? "OFF" : "ON";
+      ws.send(JSON.stringify({ pump: newPumpState }));
+    }
   };
 
   return (
-    <div className="p-4 text-center">
-      <h1 className="text-2xl font-bold">Monitoring Tanaman</h1>
-      <p className="text-lg">
-        Kelembaban Tanah: <span className="font-bold">{moisture}%</span>
-      </p>
-      <p className="text-lg">
-        Status Pompa: <span className="font-bold">{pumpStatus}</span>
-      </p>
+    <div className="p-4">
+      <h1 className="text-xl font-bold">Monitoring Kelembaban</h1>
+      <p>Kelembaban: {data.moisture}%</p>
+      <p>Pompa: {data.pump}</p>
       <button
         onClick={togglePump}
-        className={`mt-4 px-4 py-2 rounded ${
-          pumpStatus === "ON" ? "bg-red-500" : "bg-green-500"
-        }`}>
-        {pumpStatus === "ON" ? "Matikan Pompa" : "Nyalakan Pompa"}
+        className="mt-2 px-4 py-2 bg-blue-500 text-white rounded">
+        Toggle Pompa
       </button>
-      <p className="mt-2 text-sm">
-        WebSocket Status:{" "}
-        {["Connecting...", "Open", "Closing...", "Closed"][readyState]}
-      </p>
     </div>
   );
 }
