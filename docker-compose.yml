@@ -1,0 +1,23 @@
+services:
+  express:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    networks:
+      - app_network
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    command: ["http", "express:3000"]
+    environment:
+      NGROK_AUTHTOKEN: "2tUWwkFOpuCS6gxLi8LMx6Hg0iG_25ddPGqLDdjkvRgWYWZDo"
+    depends_on:
+      - express
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
