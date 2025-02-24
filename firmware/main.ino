@@ -1,32 +1,31 @@
+#include <Arduino.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
-#include <WebSocketsServer.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <ArduinoJson.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
-using namespace websockets;
 
 const char* ssid = "robi";
 const char* password = "obet1234";
 
-const int sensorTanah = A0;  // Sensor kelembaban tanah
-const int pompa = 14;        // D5 relay
+AsyncWebServer server(81);
+AsyncWebSocket ws("/ws");
 
-const int SDA_PIN = 4;  // D2
-const int SCL_PIN = 5;  // D1
 
-ESP8266WebServer server(80);
-WebSocketsServer webSocket(81);
+const int sensorTanah = A0;
+const int pompa = 14;        
+const int SDA_PIN = 4;  
+const int SCL_PIN = 5;  
+
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); 
 
-void sendSensorData() {
-    int kelembaban = analogRead(sensorTanah);
-    int moisturePercent = map(kelembaban, 1023, 300, 0, 100);
-    moisturePercent = constrain(moisturePercent, 0, 100);
-    
-    String jsonData = "{\"moisture\": " + String(moisturePercent) + ", \"pump\": \"" + (digitalRead(pompa) ? "OFF" : "ON") + "\"}";
-    webSocket.broadcastTXT(jsonData);
-}
+unsigned long lastSendTime = 0;
+const int sendInterval = 2000;
+int lastMoisture = -1;
+String lastPumpState = "";
+
 
 void scrollText(const char* text) {
     String message = "                " + String(text) + "                "; 
@@ -37,61 +36,112 @@ void scrollText(const char* text) {
     }
 }
 
-void handleWebSocketMessage(uint8_t num, uint8_t* payload, size_t length) {
-    String message = String((char*)payload);
-    Serial.println("Pesan dari Klien: " + message);
+String getSensorReadings() {
+    int kelembaban = analogRead(sensorTanah);
+    int moisturePercent = map(kelembaban, 1023, 300, 0, 100);
+    moisturePercent = constrain(moisturePercent, 0, 100);
     
-    if (message == "PUMP_ON") {
-        digitalWrite(pompa, LOW);
-        Serial.println("Pompa ON");
-    } else if (message == "PUMP_OFF") {
-        digitalWrite(pompa, HIGH);
-        Serial.println("Pompa OFF");
-    }
-    sendSensorData();
+    bool pompaStatus = moisturePercent < 50;
+    digitalWrite(pompa, pompaStatus ? LOW : HIGH);
+
+    StaticJsonDocument<200> readings;
+    readings["moisture"] = moisturePercent;
+    readings["pump"] = pompaStatus ? "ON" : "OFF";
+
+    String jsonString;
+    serializeJson(readings, jsonString);
+    return jsonString;
 }
+
+
+
+void notifyClients() {
+    String sensorReadings = getSensorReadings();
+    ws.textAll(sensorReadings);
+}
+
+
+void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
+    AwsFrameInfo *info = (AwsFrameInfo*)arg;
+    if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+        StaticJsonDocument<128> json;
+        DeserializationError error = deserializeJson(json, (char*)data);
+        
+        if (!error) {
+            String pumpCmd = json["pump"].as<String>();
+
+            if (pumpCmd == "ON") {
+                digitalWrite(pompa, LOW);
+                Serial.println("Pompa ON");
+            } else if (pumpCmd == "OFF") {
+                digitalWrite(pompa, HIGH);
+                Serial.println("Pompa OFF");
+            }
+        }
+    }
+}
+
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+    switch (type) {
+        case WS_EVT_CONNECT:
+            Serial.printf("Client %u terhubung dari %s\n", client->id(), client->remoteIP().toString().c_str());
+            break;
+        case WS_EVT_DISCONNECT:
+            Serial.printf("Client %u terputus\n", client->id());
+            break;
+        case WS_EVT_DATA:
+            handleWebSocketMessage(arg, data, len);
+            break;
+        case WS_EVT_PONG:
+        case WS_EVT_ERROR:
+            break;
+    }
+}
+
+
+void initWebSocket() {
+    ws.onEvent(onEvent);
+    server.addHandler(&ws);
+}
+
 
 void setup() {
     Serial.begin(115200);
+    
     Wire.begin(SDA_PIN, SCL_PIN);
     lcd.begin(16, 2);
     lcd.backlight();
-    lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("ADR-Team XIIPPLG");
     lcd.setCursor(0, 1);
     lcd.print("Initializing...");
     
+    pinMode(pompa, OUTPUT);
+    digitalWrite(pompa, HIGH);
+
+
+    WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
     Serial.print("Menghubungkan ke WiFi...");
     while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
         Serial.print(".");
+        delay(500);
     }
-    Serial.println("\nWiFi Connected");
-    Serial.println("IP Address: " + WiFi.localIP().toString());
-    
-    pinMode(pompa, OUTPUT);
-    digitalWrite(pompa, HIGH);
-    
-    server.on("/", []() {
-        server.send(200, "text/html", "<h1>ESP8266 WebSocket Server</h1><p>Gunakan WebSocket pada port 81</p>");
+    Serial.println("\nWiFi Connected. IP: " + WiFi.localIP().toString());
+
+
+    initWebSocket();
+
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/plain", "WebSocket Server Ready!");
     });
+
     server.begin();
-    
-    webSocket.begin();
-    webSocket.onEvent([](uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
-        if (type == WStype_TEXT) handleWebSocketMessage(num, payload, length);
-    });
 }
 
 
-unsigned long lastSendTime = 0;
-const int sendInterval = 2000; 
-
 void loop() {
-    server.handleClient();
-    webSocket.loop();
+    ws.cleanupClients();
 
     int kelembaban = analogRead(sensorTanah);
     int moisturePercent = map(kelembaban, 1023, 300, 0, 100);
@@ -100,25 +150,18 @@ void loop() {
     bool pompaStatus = moisturePercent < 50;
     digitalWrite(pompa, pompaStatus ? LOW : HIGH);
 
-    lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Kelembaban: ");
     lcd.print(moisturePercent);
-    lcd.print("%");
+    lcd.print("%  ");
 
-    if (pompaStatus) {
+    if (moisturePercent < 50) { 
         scrollText("TANAMAN LAPAR Penyiraman ON");
     } else {
         scrollText("TANAMAN KENYANG Penyiraman OFF");
     }
-
     if (millis() - lastSendTime >= sendInterval) {
         lastSendTime = millis();
-        String jsonData = "{\"moisture\": " + String(moisturePercent) + ", \"pump\": \"" + (pompaStatus ? "ON" : "OFF") + "\"}";
-        webSocket.broadcastTXT(jsonData);
+        notifyClients();
     }
 }
-
-
-
-
