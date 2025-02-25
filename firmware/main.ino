@@ -161,7 +161,7 @@ void loop() {
         scrollText("TANAMAN KENYANG Penyiraman OFF");
     }
     if (millis() - lastSendTime >= sendInterval) {
-        lastSendTime = millis();
+        lastSendTime = millis();  
         notifyClients();
     }
 }
